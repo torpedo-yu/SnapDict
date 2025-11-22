@@ -45,3 +45,10 @@ export const updateWord = (id: string, newText: string): WordItem[] => {
   localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(newHistory));
   return newHistory;
 };
+
+export const deleteWord = (id: string): WordItem[] => {
+  const currentHistory = getHistory();
+  const newHistory = currentHistory.filter(item => item.id !== id);
+  localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(newHistory));
+  return newHistory;
+};

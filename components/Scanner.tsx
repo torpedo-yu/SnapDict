@@ -117,7 +117,8 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onWordSelected }) => 
       const roiW_client = clientW * 0.85; 
       const roiH_client = 160; 
       const roiX_client = (clientW - roiW_client) / 2;
-      const roiY_client = (clientH - roiH_client) / 2;
+      // Updated Position: Top 1/3 (Center is at 1/3 of height)
+      const roiY_client = (clientH / 3) - (roiH_client / 2);
 
       // Map to Video Coordinates
       const roiX_video = (roiX_client - offsetX) / scale;
@@ -230,8 +231,9 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onWordSelected }) => 
 
         {/* 2. Target Box (Only when idle) */}
         {status === 'idle' && (
-          <div className="absolute z-10 w-[85%] h-[160px] border-2 border-yellow-400 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center pointer-events-none">
-             <span className="text-yellow-400/70 text-xs font-mono uppercase tracking-widest bg-black/20 px-2 py-1 rounded">Target Word</span>
+          // Positioned at top 1/3 (33% from top) to match 1:2 ratio preference
+          <div className="absolute z-10 w-[85%] h-[160px] border-2 border-yellow-400 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] pointer-events-none top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2">
+             {/* Removed text label as requested */}
           </div>
         )}
 

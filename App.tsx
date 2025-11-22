@@ -111,6 +111,14 @@ const App: React.FC = () => {
     setHistory(updatedHistory);
   };
 
+  const handleDeleteWord = (id: string) => {
+    const updatedHistory = storage.deleteWord(id);
+    setHistory(updatedHistory);
+    if (selectedWordId === id) {
+      setSelectedWordId(null);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gray-100">
       {/* Left Sidebar (Always visible on desktop, full width on mobile if no selection) */}
@@ -122,6 +130,7 @@ const App: React.FC = () => {
           onScanClick={openScanner}
           onManualAdd={handleManualAdd}
           onEditWord={handleEditWord}
+          onDeleteWord={handleDeleteWord}
         />
       </div>
 
