@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { DetailView } from './components/DetailView';
 import { Scanner } from './components/Scanner';
@@ -11,20 +11,82 @@ const App: React.FC = () => {
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
 
+  // Refs to track state inside popstate listener
+  const isScanningRef = useRef(isScanning);
+  const selectedIdRef = useRef(selectedWordId);
+
   // Derived State
   const selectedWord = history.find(w => w.id === selectedWordId) || null;
 
-  // Init
+  // Sync Refs
+  useEffect(() => {
+    isScanningRef.current = isScanning;
+    selectedIdRef.current = selectedWordId;
+  }, [isScanning, selectedWordId]);
+
+  // Init Load
   useEffect(() => {
     setHistory(storage.getHistory());
   }, []);
 
-  // Handlers
+  // History / Back Button Handler
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Priority 1: Close Scanner if open
+      if (isScanningRef.current) {
+        setIsScanning(false);
+        return;
+      }
+      // Priority 2: Deselect Word (Close Detail View) if selected
+      if (selectedIdRef.current) {
+        setSelectedWordId(null);
+        return;
+      }
+      // Otherwise allow default browser back (exit app or prev page)
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // --- Actions that manipulate History ---
+
+  const openScanner = () => {
+    // Push new state so back button can close it
+    window.history.pushState({ view: 'scanner' }, '', '');
+    setIsScanning(true);
+  };
+
+  const closeScanner = () => {
+    // Trigger back, which fires popstate, which calls setIsScanning(false)
+    window.history.back();
+  };
+
+  const selectWord = (word: WordItem) => {
+    // If already viewing a word, replace state (don't stack detail views)
+    // If coming from list, push state
+    if (selectedWordId) {
+      window.history.replaceState({ view: 'detail' }, '', '');
+    } else {
+      window.history.pushState({ view: 'detail' }, '', '');
+    }
+    setSelectedWordId(word.id);
+  };
+
+  const closeDetail = () => {
+    window.history.back();
+  };
+
   const handleWordDetected = (text: string) => {
     const updatedHistory = storage.saveWord(text);
     setHistory(updatedHistory);
+    
+    // Important: We are currently in 'Scanner' history state.
+    // We want to switch to 'Detail' state without keeping Scanner in history stack.
+    // So we REPLACE the current state.
+    window.history.replaceState({ view: 'detail' }, '', '');
+    
     setIsScanning(false);
-    // Auto select the new word
     if (updatedHistory.length > 0) {
       setSelectedWordId(updatedHistory[0].id);
     }
@@ -34,6 +96,12 @@ const App: React.FC = () => {
     const updatedHistory = storage.saveWord(text);
     setHistory(updatedHistory);
     if (updatedHistory.length > 0) {
+      // Similar logic: if we are already deep in nav, replace, else push
+      if (selectedWordId) {
+        window.history.replaceState({ view: 'detail' }, '', '');
+      } else {
+        window.history.pushState({ view: 'detail' }, '', '');
+      }
       setSelectedWordId(updatedHistory[0].id);
     }
   };
@@ -50,8 +118,8 @@ const App: React.FC = () => {
         <Sidebar
           history={history}
           selectedId={selectedWordId}
-          onSelectWord={(w) => setSelectedWordId(w.id)}
-          onScanClick={() => setIsScanning(true)}
+          onSelectWord={selectWord}
+          onScanClick={openScanner}
           onManualAdd={handleManualAdd}
           onEditWord={handleEditWord}
         />
@@ -61,14 +129,14 @@ const App: React.FC = () => {
       <main className={`flex-1 h-full ${!selectedWordId ? 'hidden md:flex' : 'block fixed inset-0 z-20 md:static'}`}>
         <DetailView
           wordItem={selectedWord}
-          onCloseMobile={() => setSelectedWordId(null)}
+          onCloseMobile={closeDetail}
         />
       </main>
 
       {/* Scanner Overlay */}
       {isScanning && (
         <Scanner
-          onClose={() => setIsScanning(false)}
+          onClose={closeScanner}
           onWordSelected={handleWordDetected}
         />
       )}
