@@ -1,0 +1,7 @@
+{
+  "name": "SnapDict",
+  "description": "A minimalist OCR scanner for language learners to quickly look up words in dictionaries.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
