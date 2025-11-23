@@ -226,7 +226,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onWordSelected, onBat
 
   const handleModeChange = (mode: ScanMode) => {
     setScanMode(mode);
-    setSelectedIndices(new Set()); // Clear selection on mode change
+    // Selection is persisted when switching modes
   };
 
   const handleAction = () => {
@@ -354,7 +354,9 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onWordSelected, onBat
                       onClick={(e) => handleWordClick(e, box.text, idx)}
                       className={`absolute rounded cursor-pointer transition-all active:scale-95 group ${
                         isInteractiveMode 
-                          ? (isSelected ? 'bg-blue-500/50 border-2 border-blue-400' : 'bg-transparent border border-white/20 hover:bg-white/10') 
+                          ? (isSelected 
+                              ? 'bg-blue-500/50 border-2 border-blue-400 z-10' 
+                              : 'bg-transparent border border-blue-400 hover:bg-blue-500/10') 
                           : 'bg-blue-500/20 hover:bg-blue-500/40 border border-blue-400'
                       }`}
                       style={getImgBoxStyle(box)}
