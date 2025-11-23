@@ -15,8 +15,11 @@ export const saveWord = (text: string): WordItem[] => {
   const cleanText = text.trim();
   if (!cleanText) return getHistory();
 
+  // Fix: Append random string to timestamp to ensure unique IDs during batch operations
+  const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
   const newItem: WordItem = {
-    id: Date.now().toString(),
+    id: uniqueId,
     text: cleanText.charAt(0).toUpperCase() + cleanText.slice(1),
     timestamp: Date.now(),
   };
