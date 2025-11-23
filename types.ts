@@ -21,4 +21,5 @@ export interface BoundingBox {
   x1: number;
   y1: number;
   text: string;
+  originalText: string;
 }

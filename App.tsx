@@ -92,6 +92,28 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBatchAdd = (texts: string[]) => {
+    // Input texts are in reading order (Top->Bottom).
+    // storage.saveWord adds new items to the TOP of the list.
+    // To make them appear in reading order in the list:
+    // We need to add the LAST word first, and the FIRST word last.
+    // Example: Reading "A B C". 
+    // Save C -> List: [C]
+    // Save B -> List: [B, C]
+    // Save A -> List: [A, B, C] (Desired)
+    let updatedHistory = history;
+    
+    // Create a reversed copy to iterate
+    [...texts].reverse().forEach(text => {
+       updatedHistory = storage.saveWord(text);
+    });
+    
+    setHistory(updatedHistory);
+    
+    // Close scanner and return to list view (simulate back button to pop scanner state)
+    window.history.back();
+  };
+
   const handleManualAdd = (text: string) => {
     const updatedHistory = storage.saveWord(text);
     setHistory(updatedHistory);
@@ -147,6 +169,7 @@ const App: React.FC = () => {
         <Scanner
           onClose={closeScanner}
           onWordSelected={handleWordDetected}
+          onBatchAdd={handleBatchAdd}
         />
       )}
     </div>
