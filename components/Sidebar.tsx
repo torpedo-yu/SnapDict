@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { WordItem } from '../types';
 
 interface SidebarProps {
@@ -26,7 +26,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // State for item modes
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [menuId, setMenuId] = useState<string | null>(null); // ID of the item with open menu
+  
+  // State for Swipe Actions (Revealed Item ID)
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  
+  // Touch handling refs
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,51 +41,76 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  // --- Action Handlers ---
+  // --- Interaction Handlers ---
 
   const handleRowClick = (item: WordItem) => {
-    // If we are editing this item, ignore click
     if (editingId === item.id) return;
 
-    // If menu is open for this item, close it (toggle behavior)
-    if (menuId === item.id) {
-      setMenuId(null);
+    // If this item is revealed (buttons shown), tap closes it
+    if (revealedId === item.id) {
+      setRevealedId(null);
       return;
     }
 
-    // If menu is open for another item, close that one
-    if (menuId) {
-      setMenuId(null);
+    // If another item is revealed, close it first
+    if (revealedId) {
+      setRevealedId(null);
     }
 
-    // Select the word (Default Short Press Action)
+    // Select the word
     onSelectWord(item);
   };
 
-  const handleLongPress = (e: React.MouseEvent, itemId: string) => {
-    // Use context menu event as "Long Press" on mobile and "Right Click" on desktop
-    e.preventDefault(); // Prevent system menu
-    if (editingId !== itemId) {
-      setMenuId(itemId);
-      // Optional: weak vibration feedback
-      if (navigator.vibrate) navigator.vibrate(50);
+  // --- Swipe / Touch Logic ---
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, id: string) => {
+    if (!touchStartRef.current) return;
+    
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const diffX = endX - touchStartRef.current.x;
+    const diffY = endY - touchStartRef.current.y;
+
+    touchStartRef.current = null;
+
+    // Determine if swipe is horizontal and significant enough (>40px)
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 40) {
+      if (diffX < 0) {
+        // Swipe Left -> Reveal
+        setRevealedId(id);
+      } else {
+        // Swipe Right -> Hide
+        if (revealedId === id) setRevealedId(null);
+      }
     }
   };
+
+  const toggleReveal = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setRevealedId(prev => prev === id ? null : id);
+  };
+
+  // --- Action Handlers ---
 
   const startEditing = (e: React.MouseEvent, item: WordItem) => {
     e.stopPropagation();
     setEditingId(item.id);
     setEditText(item.text);
-    setMenuId(null); // Close menu
+    setRevealedId(null); // Close the slide menu
   };
 
   const performDelete = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // Critical: Stop event bubbling
-    // Use a small delay to ensure UI feedback is seen or to detach from current event loop if needed
-    // but usually direct call is fine.
+    e.stopPropagation();
     if (window.confirm("Delete this word?")) {
       onDeleteWord(id);
-      if (menuId === id) setMenuId(null);
+      if (revealedId === id) setRevealedId(null);
     }
   };
 
@@ -168,99 +198,105 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ) : (
           history.map((item) => {
-            const isMenuOpen = menuId === item.id;
+            const isRevealed = revealedId === item.id;
             const isEditing = editingId === item.id;
             const isSelected = selectedId === item.id;
 
             return (
-              <div
-                key={item.id}
-                onClick={() => handleRowClick(item)}
-                onContextMenu={(e) => handleLongPress(e, item.id)}
-                className={`relative group p-4 rounded-xl border transition-all duration-200 flex justify-between items-center min-h-[84px] select-none ${
-                  isSelected && !isMenuOpen && !isEditing
-                    ? 'bg-white border-blue-500 shadow-md ring-1 ring-blue-500'
-                    : 'bg-white border-transparent hover:border-gray-200 hover:shadow-sm'
-                } ${isMenuOpen ? 'bg-blue-50 border-blue-200 shadow-inner' : ''} ${isEditing ? 'cursor-default ring-2 ring-blue-100 border-blue-200' : 'cursor-pointer'}`}
+              <div 
+                key={item.id} 
+                className="relative overflow-hidden rounded-xl bg-gray-100 mb-2 select-none group"
               >
-                {/* VIEW 1: EDITING MODE */}
-                {isEditing ? (
-                  <div className="flex items-center w-full gap-2 animate-in fade-in duration-200" onClick={e => e.stopPropagation()}>
-                    <input
-                      autoFocus
-                      type="text"
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onKeyDown={(e) => handleEditKeyDown(e, item.id)}
-                      className="flex-1 bg-white border border-gray-300 rounded px-2 py-2 text-lg text-slate-800 font-bold focus:outline-none focus:border-blue-500 shadow-sm"
-                    />
-                    <button 
-                      onClick={(e) => saveEditing(e, item.id)}
-                      className="w-10 h-10 flex items-center justify-center bg-green-100 text-green-700 rounded-lg hover:bg-green-200 active:scale-95 transition-all"
+                {/* LAYER 1: ACTIONS (Behind) */}
+                <div className="absolute inset-y-0 right-0 w-32 flex items-center justify-end gap-2 pr-4 z-0">
+                    {/* Edit Button */}
+                    <button
+                        onClick={(e) => startEditing(e, item)}
+                        className="w-10 h-10 flex items-center justify-center bg-white text-slate-500 rounded-lg shadow-sm hover:text-blue-600 active:scale-95 transition-all"
                     >
-                      ✅
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                        </svg>
                     </button>
-                    <button 
-                      onClick={cancelEditing}
-                      className="w-10 h-10 flex items-center justify-center bg-red-100 text-red-700 rounded-lg hover:bg-red-200 active:scale-95 transition-all"
+                    {/* Delete Button */}
+                    <button
+                        onClick={(e) => performDelete(e, item.id)}
+                        className="w-10 h-10 flex items-center justify-center bg-white text-red-500 rounded-lg shadow-sm hover:bg-red-50 active:scale-95 transition-all"
                     >
-                      ❌
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
                     </button>
-                  </div>
-                ) : isMenuOpen ? (
-                  // VIEW 2: MENU MODE (Long Press) - Updated to use Monochrome Icons
-                  <div className="flex items-center w-full justify-between gap-2 animate-in zoom-in-95 duration-150">
-                    <div className="font-bold text-slate-500 truncate flex-1 opacity-50 text-sm pl-1">
-                        {item.text}
+                </div>
+
+                {/* LAYER 2: CONTENT (Front) */}
+                <div
+                  onClick={() => handleRowClick(item)}
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={(e) => handleTouchEnd(e, item.id)}
+                  className={`
+                    relative z-10 min-h-[84px] p-4 flex items-center justify-between bg-white transition-transform duration-300 ease-out border rounded-xl
+                    ${isRevealed ? '-translate-x-32' : 'translate-x-0'}
+                    ${isSelected && !isEditing ? 'border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'border-transparent hover:border-gray-200 hover:shadow-sm'}
+                    ${isEditing ? 'cursor-default' : 'cursor-pointer'}
+                  `}
+                >
+                  {isEditing ? (
+                    // EDIT MODE VIEW
+                    <div className="flex items-center w-full gap-2 animate-in fade-in duration-200" onClick={e => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => handleEditKeyDown(e, item.id)}
+                        className="flex-1 bg-white border border-gray-300 rounded px-2 py-2 text-lg text-slate-800 font-bold focus:outline-none focus:border-blue-500 shadow-sm"
+                      />
+                      <button 
+                        onClick={(e) => saveEditing(e, item.id)}
+                        className="w-10 h-10 flex items-center justify-center bg-green-100 text-green-700 rounded-lg hover:bg-green-200 active:scale-95 transition-all"
+                      >
+                        ✅
+                      </button>
+                      <button 
+                        onClick={cancelEditing}
+                        className="w-10 h-10 flex items-center justify-center bg-red-100 text-red-700 rounded-lg hover:bg-red-200 active:scale-95 transition-all"
+                      >
+                        ❌
+                      </button>
                     </div>
-                    <div className="flex items-center gap-2">
-                        {/* Edit Button */}
-                        <button
-                            onClick={(e) => startEditing(e, item)}
-                            className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 text-slate-500 rounded-lg shadow-sm hover:text-blue-600 hover:border-blue-200 active:scale-95 transition-all"
-                            aria-label="Edit"
-                        >
-                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                            </svg>
-                        </button>
-                        {/* Delete Button */}
-                        <button
-                            onClick={(e) => performDelete(e, item.id)}
-                            className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 text-slate-500 rounded-lg shadow-sm hover:text-red-600 hover:border-red-200 active:scale-95 transition-all"
-                            aria-label="Delete"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                            </svg>
-                        </button>
-                        {/* Close Button */}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); setMenuId(null); }}
-                            className="w-10 h-10 flex items-center justify-center bg-gray-100 text-gray-400 rounded-lg hover:bg-gray-200 active:scale-95 transition-all"
-                            aria-label="Close Menu"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                  </div>
-                ) : (
-                  // VIEW 3: NORMAL MODE
-                  <>
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
+                  ) : (
+                    // NORMAL VIEW
+                    <>
+                      <div className="flex-1 min-w-0 pr-2">
                         <h3 className={`font-bold text-lg truncate ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                           {item.text}
                         </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </>
-                )}
+
+                      {/* Desktop/Action Toggle (Visible on Hover or if revealed) */}
+                      <button
+                        onClick={(e) => toggleReveal(e, item.id)}
+                        className={`p-2 rounded-full text-gray-400 hover:bg-gray-100 hover:text-blue-600 transition-all
+                            ${isRevealed ? 'opacity-100 text-blue-600 bg-blue-50' : 'md:opacity-0 md:group-hover:opacity-100'}
+                        `}
+                      >
+                        {isRevealed ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                          </svg>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })
